@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preview - El Sigma Impostor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <div class="header-content">
+                <button id="back-btn" class="back-btn hidden">← VOLVER</button>
+                <h2 class="header-title">Gárrio PHONE</h2>
+                <button id="sound-btn" class="sound-btn">🔊</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="lobby">
+                <div class="lobby-container">
+                    <h1>El Sigma Impostor</h1>
+                    <p class="game-description">Un juego de palabras y engaño. ¿Podrás descubrir al impostor antes de que sea tarde?</p>
+                    
+                    <div class="input-group">
+                        <input type="text" id="player-name-input" placeholder="Introduce tu nombre">
+                        <button id="create-room">Crear Sala</button>
+                    </div>
+
+                    <div class="divider">O</div>
+
+                    <div class="input-group">
+                        <input type="text" id="room-code-input" placeholder="Código de la sala">
+                        <button id="join-room">Unirse</button>
+                    </div>
+
+                    <div class="presets-section">
+                        <h3>PREESTABLECIDOS</h3>
+                        <div class="presets-grid">
+                            <div class="preset-card" data-preset="normal">
+                                <div class="preset-icon">⚙️</div>
+                                <p>NORMAL</p>
+                            </div>
+                            <div class="preset-card" data-preset="imitation">
+                                <div class="preset-icon">🎭</div>
+                                <p>IMITACIÓN</p>
+                            </div>
+                            <div class="preset-card" data-preset="animation">
+                                <div class="preset-icon">✨</div>
+                                <p>ANIMACIÓN</p>
+                            </div>
+                            <div class="preset-card" data-preset="breakheads">
+                                <div class="preset-icon">💥</div>
+                                <p>ROMPEHIELOS</p>
+                            </div>
+                            <div class="preset-card" data-preset="exquisite">
+                                <div class="preset-icon">🎨</div>
+                                <p>CADÁVER EXQUISITO</p>
+                            </div>
+                            <div class="preset-card" data-preset="complement">
+                                <div class="preset-icon">🧩</div>
+                                <p>COMPLEMENTAR</p>
+                            </div>
+                            <div class="preset-card" data-preset="masterwork">
+                                <div class="preset-icon">🖼️</div>
+                                <p>OBRA MAESTRA</p>
+                            </div>
+                            <div class="preset-card" data-preset="history">
+                                <div class="preset-icon">📜</div>
+                                <p>HISTORIA</p>
+                            </div>
+                            <div class="preset-card" data-preset="missingpart">
+                                <div class="preset-icon">👤</div>
+                                <p>FALTA UNA PARTE</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="personalization-section">
+                        <h3>AJUSTES PERSONALIZADOS</h3>
+                        <div class="settings-grid">
+                            <button id="settings-btn" class="settings-btn">⚙️ Ajustes</button>
+                            <button id="show-tutorial-btn" class="settings-btn">❓ ¿Cómo se juega?</button>
+                            <button id="rules-btn" class="settings-btn">📋 Normas</button>
+                            <button id="manage-words-btn" class="settings-btn hidden">📚 Gestionar Palabras</button>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="invite-btn" class="invite-btn">📎 INVITAR</button>
+                        <button id="play-btn" class="play-btn">▶️ EMPEZAR</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="wait-room" class="hidden">
+                <div class="wait-room-container">
+                    <div class="wait-room-header">
+                        <div class="players-counter">
+                            <span id="players-count">1</span><span>/14</span>
+                        </div>
+                        <h2>JUGADORES</h2>
+                        <div class="placeholder"></div>
+                    </div>
+
+                    <div class="room-code-container">
+                        <p>Código de la sala:</p>
+                        <div class="code-display">
+                            <span id="room-code-display" class="room-code">ABC123</span>
+                            <button id="copy-code-btn" class="copy-btn">📋</button>
+                        </div>
+                    </div>
+
+                    <div class="players-list-container">
+                        <div id="players-container" class="players-grid">
+                            <div class="player-card own-card">
+                                <div class="player-info">
+                                    <div class="player-avatar">M</div>
+                                    <div class="player-name">MIUCKNAME78</div>
+                                </div>
+                                <span>👑</span>
+                            </div>
+                            <div class="player-card">
+                                <div class="player-info">
+                                    <div class="player-avatar">V</div>
+                                    <div class="player-name">VACIO</div>
+                                </div>
+                            </div>
+                            <div class="player-card">
+                                <div class="player-info">
+                                    <div class="player-avatar">V</div>
+                                    <div class="player-name">VACIO</div>
+                                </div>
+                            </div>
+                            <div class="player-card">
+                                <div class="player-info">
+                                    <div class="player-avatar">V</div>
+                                    <div class="player-name">VACIO</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wait-room-actions">
+                        <button id="add-bot-btn" class="secondary-btn">+ Añadir Bot</button>
+                        <button id="start-game">Iniciar Juego</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2025 Sigma Company. Todos los derechos reservados.</p>
+            <div class="social-media">
+                <a href="https://www.instagram.com/sigmacompanyoficial" target="_blank" aria-label="Instagram">
+                    <img src="https://img.icons8.com/ios-filled/50/000000/instagram-new.png" alt="Instagram">
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Script para preview
+        document.getElementById('play-btn').addEventListener('click', () => {
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('wait-room').classList.remove('hidden');
+            document.getElementById('back-btn').classList.remove('hidden');
+        });
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            document.getElementById('wait-room').classList.add('hidden');
+            document.getElementById('lobby').classList.remove('hidden');
+            document.getElementById('back-btn').classList.add('hidden');
+        });
+
+        // Preset cards interaction
+        document.querySelectorAll('.preset-card').forEach(card => {
+            card.addEventListener('click', () => {
+                document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
+                card.classList.add('selected');
+            });
+        });
+
+        // Copy code button
+        document.getElementById('copy-code-btn').addEventListener('click', () => {
+            const code = document.getElementById('room-code-display').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                alert('Código copiado: ' + code);
+            });
+        });
+    </script>
+</body>
+</html>
