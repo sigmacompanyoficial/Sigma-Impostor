@@ -16,8 +16,8 @@ const analytics = getAnalytics(app);
 const GAME_CONFIG = {
     MAX_PLAYERS: 20,
     MIN_PLAYERS: 3,
-    TURN_TIME: 30000,
-    ROUNDS: 3,
+    TURN_TIME: 10000, // Reducido a 10 segundos
+    ROUNDS: 2,
     INACTIVE_TIME: 5 * 60 * 1000,
     BOT_THINK_TIME: 2000,
     BOT_MAX_THINK: 5000,
@@ -30,6 +30,8 @@ const gameState = {
     currentRoomData: null,
     turnInterval: null, // Para el setInterval del contador visual
     turnTimeout: null,
+    wordRevealTimeout: null, // Timer for the 10-second word reveal phase
+    wordRevealInterval: null, // Interval for updating the word reveal timer display
     tutorialInterval: null,
     currentTutorialStep: 1,
     soundEnabled: localStorage.getItem('soundEnabled') !== 'false',
@@ -81,6 +83,9 @@ const DOM = {
     chatInput: document.getElementById('chat-input'),
     sendMessageBtn: document.getElementById('send-message'),
     turnTimerDisplay: document.getElementById('turn-timer-display'),
+    wordRevealContainer: document.getElementById('word-reveal-container'),
+    wordRevealButton: document.getElementById('word-reveal-button'),
+    wordRevealTimerDisplay: document.getElementById('word-reveal-timer-display'),
     clearChatBtn: document.getElementById('clear-chat-btn'),
     muteChatBtn: document.getElementById('mute-chat-btn'),
     onlinePlayersPreview: document.getElementById('online-players-preview'),
@@ -90,6 +95,7 @@ const DOM = {
     // Votación
     votingSection: document.getElementById('voting-section'),
     votingList: document.getElementById('voting-list'),
+    startVotingBtn: null, // Se creará dinámicamente
     
     // Resultados
     resultsRoom: document.getElementById('results-room'),
@@ -832,7 +838,7 @@ function showAnimationScreen(room) {
 
     createProgressBar(5000);
 
-    setTimeout(() => {
+    setTimeout(() => { //Tiempo para que salga la palabra
         if (gameState.isHost) {
             update(ref(database, `salas/${gameState.currentRoom}`), {
                 estado: 'en_juego',
@@ -840,15 +846,15 @@ function showAnimationScreen(room) {
             });
         }
     }, 5000);
-}
+}//Tiempo para que salga la palabra
 
 // ==================== PANTALLA DE JUEGO ====================
 let currentTurnTimer = null;
 
-function showGameRoom(room) {
+async function showGameRoom(room) {
     showScreen('game');
     gameState.gameStarted = true;
-    
+
     // Iniciar música de fondo
     soundManager.startBackground();
 
@@ -864,19 +870,82 @@ function showGameRoom(room) {
         return;
     }
 
+    // Hide game info initially
+    if (DOM.gameInfo) {
+        DOM.gameInfo.classList.add('hidden');
+    }
+
+    // Display word reveal UI
+    if (DOM.wordRevealContainer) {
+        DOM.wordRevealContainer.classList.remove('hidden');
+        DOM.wordRevealTimerDisplay.textContent = '10s'; // Initial display
+        DOM.wordRevealButton.textContent = 'Haz click para ver tu palabra/rol';
+        DOM.wordRevealButton.disabled = false;
+    }
+
+    // Disable chat during reveal phase
+    DOM.chatInput.disabled = true;
+    DOM.sendMessageBtn.disabled = true;
+
+    let revealTimeLeft = 10; // 10 seconds
+
+    // Clear any previous reveal timers
+    if (gameState.wordRevealInterval) clearInterval(gameState.wordRevealInterval);
+    if (gameState.wordRevealTimeout) clearTimeout(gameState.wordRevealTimeout);
+
+    gameState.wordRevealInterval = setInterval(() => {
+        revealTimeLeft--;
+        if (DOM.wordRevealTimerDisplay) {
+            DOM.wordRevealTimerDisplay.textContent = `${revealTimeLeft}s`;
+        }
+
+        if (revealTimeLeft <= 0) {
+            clearInterval(gameState.wordRevealInterval);
+            if (DOM.wordRevealContainer) {
+                DOM.wordRevealContainer.classList.add('hidden');
+            }
+            // If timer expires without click, proceed to game turn phase
+            // The word will remain hidden for this player
+            startGameTurnPhase(room);
+        }
+    }, 1000);
+
+    // Event listener for reveal button
+    const revealClickHandler = () => {
+        clearInterval(gameState.wordRevealInterval);
+        if (DOM.wordRevealContainer) {
+            DOM.wordRevealContainer.classList.add('hidden');
+        }
+
+        // Reveal the word/category
+        if (DOM.gameInfo) {
+            if (player.rol === 'impostor') {
+                DOM.gameInfo.textContent = `📂 Categoría: ${room.categoria}`;
+            } else {
+                DOM.gameInfo.textContent = `💭 Palabra: ${player.palabra}`;
+            }
+            DOM.gameInfo.classList.remove('hidden');
+        }
+        DOM.wordRevealButton.removeEventListener('click', revealClickHandler); // Remove to prevent multiple calls
+        startGameTurnPhase(room); // Proceed to game turn phase immediately after revealing
+    };
+    if (DOM.wordRevealButton) {
+        DOM.wordRevealButton.removeEventListener('click', revealClickHandler); // Ensure no duplicate listeners
+        DOM.wordRevealButton.addEventListener('click', revealClickHandler);
+    }
+}
+
+function startGameTurnPhase(room) {
+    // Re-enable chat
+    DOM.chatInput.disabled = false;
+    DOM.sendMessageBtn.disabled = false;
+
+    // Update game title (already done in showGameRoom, but ensure it's visible)
     if (DOM.gameTitle) {
         DOM.gameTitle.textContent = `🎮 Ronda ${room.rondaActual}/${GAME_CONFIG.ROUNDS}`;
     }
 
-    if (DOM.gameInfo) {
-        if (player.rol === 'impostor') {
-            DOM.gameInfo.textContent = `📂 Categoría: ${room.categoria}`;
-        } else {
-            DOM.gameInfo.textContent = `💭 Palabra: ${player.palabra}`;
-        }
-    }
-
-    updateTurn(room);
+   updateTurn(room);
     updateChat(room);
 }
 
@@ -886,9 +955,9 @@ function updateTurn(room) {
 
     // Limpiar cualquier temporizador de intervalo existente
     if (gameState.turnInterval) {
-        clearInterval(gameState.turnInterval);
+       clearInterval(gameState.turnInterval);
     }
-    clearTimeout(gameState.turnTimeout);
+    clearTimeout(gameState.turnTimeout); // Clear the main game turn timeout
 
     let timeLeft = GAME_CONFIG.TURN_TIME;
 
@@ -934,7 +1003,7 @@ function updateTurn(room) {
         clearInterval(gameState.turnInterval); // Limpiar el intervalo cuando el timeout se dispara
         gameState.turnInterval = null; // Resetear el ID del intervalo
         passTurn(room);
-    }, GAME_CONFIG.TURN_TIME + 500); // Añadido un pequeño buffer
+    }, 10000 + 500); // Añadido un pequeño buffer
 }
 
 async function handleBotTurn(room) {
@@ -1145,7 +1214,7 @@ window.addEventListener('updateOnlinePlayers', () => {
     `;
 });
 
-// ==================== TIENDA ====================
+// ==================== TIENDA (COMENTADA PORQUE NO SE USA EN ESTA VERSIÓN) ====================
 function displayShopItems() {
     const shopItems = document.getElementById('shopItems');
     if (!shopItems) return;
@@ -1324,6 +1393,11 @@ function showVotingScreen(room) {
         DOM.votingList.innerHTML = '';
     }
 
+    const h3 = document.createElement('h3');
+    h3.textContent = '❓ ¿Quién es el Impostor?';
+    h3.style.color = '#00FFFF';
+    DOM.votingList?.appendChild(h3);
+
     if (player?.haVotado) {
         if (DOM.votingList) {
             DOM.votingList.innerHTML = '<p style="color: #00FFFF; text-align: center; margin-top: 20px;">✓ Has votado. Esperando a los demás...</p>';
@@ -1331,13 +1405,10 @@ function showVotingScreen(room) {
         return;
     }
 
-    const h3 = document.createElement('h3');
-    h3.textContent = '❓ ¿Quién es el Impostor?';
-    h3.style.color = '#00FFFF';
-    DOM.votingList?.appendChild(h3);
-
     for (const playerId in room.jugadores) {
-        if (playerId !== gameState.currentPlayerId) {
+        const playerInList = room.jugadores[playerId];
+
+        if (playerId !== gameState.currentPlayerId && playerInList) {
             const votedPlayer = room.jugadores[playerId];
 
             const li = document.createElement('li');
@@ -1345,7 +1416,7 @@ function showVotingScreen(room) {
             li.style.marginBottom = '12px';
 
             const button = document.createElement('button');
-            button.textContent = `🔴 ${votedPlayer.nombre}${votedPlayer.isBot ? ' 🤖' : ''}`;
+            button.textContent = `Votar por ${votedPlayer.nombre}${votedPlayer.isBot ? ' 🤖' : ''}`;
             button.style.cssText = `
                 width: 100%;
                 padding: 12px;
@@ -1374,21 +1445,21 @@ function showVotingScreen(room) {
         }
     }
 
-    /*// Handle bot voting
+    // Handle bot voting
     if (gameState.isHost) { // Only host should trigger bot votes to avoid duplicates
         for (const playerId in room.jugadores) {
             const p = room.jugadores[playerId];
             if (p.isBot && !p.haVotado) {
-                handleBotVote(room, playerId);
+                // handleBotVote(room, playerId); // Descomentar si se implementa la lógica de voto de bots
             }
         }
     }
-    */
+    
 
     soundManager.play('turn');
 }
 
-/*async function handleBotVote(room, botPlayerId) {
+async function handleBotVote(room, botPlayerId) {
     const botPlayer = room.jugadores[botPlayerId];
     if (!botPlayer || botPlayer.haVotado) return;
 
@@ -1432,7 +1503,7 @@ function showVotingScreen(room) {
 
     await voteFor(botPlayerId, votedPlayerId);
     showNotification(`🤖 ${botPlayer.nombre} ha votado.`, 'notification');
-}*/
+}
 
 
 async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
@@ -1440,7 +1511,7 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
 
     try {
         const roomRef = ref(database, `salas/${gameState.currentRoom}`);
-
+       
         // Update the voter's status
         await update(ref(database, `salas/${gameState.currentRoom}/jugadores/${voterId}`), {
             haVotado: true,
@@ -1449,7 +1520,7 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
 
         await push(child(roomRef, `votos/${votedPlayerId}`), gameState.currentPlayerId);
 
-        soundManager.play('vote');
+       soundManager.play('vote');
         showNotification('✅ Voto registrado', 'success');
 
         const snapshot = await get(roomRef);
@@ -1467,7 +1538,7 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
     }
 }
 
-async function calculateResults(room) {
+async function calculateResults(room){
     try {
         const votes = {};
         let maxVotes = 0;
@@ -1502,7 +1573,7 @@ async function calculateResults(room) {
             soundManager.play('error');
         }
 
-        await update(ref(database, `salas/${gameState.currentRoom}`), {
+       await update(ref(database, `salas/${gameState.currentRoom}`), {
             estado: 'fin',
             message,
             lastActivity: Date.now(),
@@ -1512,7 +1583,7 @@ async function calculateResults(room) {
     }
 }
 
-function isSpectator(room, playerId) {
+function isSpectator(room, playerId){
     try {
         const player = room.jugadores?.[playerId];
         return player?.isSpectator === true;
@@ -1523,7 +1594,7 @@ function isSpectator(room, playerId) {
 }
 
 // ==================== PANTALLA DE RESULTADOS ====================
-function showResultsScreen(room) {
+function showResultsScreen(room){
     showScreen('results');
 
     if (DOM.resultMessage) {
@@ -1582,6 +1653,7 @@ DOM.playAgainBtn?.addEventListener('click', async () => {
                 palabra: null,
                 lastActivity: Date.now(),
             };
+            const palabra = "Pollo";
 
             for (const playerId in room.jugadores) {
                 updates[`jugadores/${playerId}/haVotado`] = false;
@@ -1589,6 +1661,7 @@ DOM.playAgainBtn?.addEventListener('click', async () => {
                 updates[`jugadores/${playerId}/palabra`] = null;
                 updates[`jugadores/${playerId}/votoPor`] = null;
             }
+            updates[`palabra`] = palabra;
 
             await update(roomRef, updates);
 
@@ -1644,7 +1717,7 @@ window.addEventListener('load', () => {
     console.log('✅ El Sigma Impostor cargado correctamente');
 });
 
-// ==================== ESTILOS DINÁMICOS ====================
+// ==================== ESTILOS DINÁMICOS ==================== 
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideInMessage {
