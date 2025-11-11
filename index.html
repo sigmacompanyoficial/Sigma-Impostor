@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+     <meta name="google-site-verification" content="z1rdetYl_fyOaGWQqelmf56GF_3gW3i8MlJp5t34vU8" />
+    <!-- META TAGS BÁSICOS -->
     <!-- META TAGS BÁSICOS -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
@@ -110,42 +112,56 @@
                         <p class="game-tagline">Demuestra tu ingenio • Descubre al impostor • ¡Gana!</p>
                     </div>
 
-                    <!-- COLUMNA IZQUIERDA: Código de Entrada -->
-                    <div class="lobby-left">
-                        <h3 style="color: #00FFFF; margin-bottom: 15px;">📍 ENTRADA</h3>
-                        <div class="input-group">
-                            <input type="text" id="player-name-input" placeholder="Tu nombre">
-                            <button id="create-room">Crear</button>
-                        </div>
-                        <div style="text-align: center; color: #0066FF; margin: 15px 0; font-weight: 600;">O</div>
-                        <div class="input-group">
-                            <input type="text" id="room-code-input" placeholder="Código sala">
-                            <button id="join-room">Unirse</button>
+                    <div class="online-counter">
+                        <p class="online-counter-text">
+                            👥 Usuarios Conectados: <span id="online-users-counter" class="online-counter-value">0</span>
+                        </p>
+                    </div>
+
+                    <div class="input-group" style="width: 100%;">
+                        <input type="text" id="player-name-input" placeholder="Escribe tu nombre de jugador...">
+                    </div>
+
+                    <!-- SELECCIÓN DE MODO DE JUEGO -->
+                    <div class="game-modes-container">
+                        <h3 style="color: #00FFFF; margin-bottom: 15px; text-align: center;">🕹️ Elige un Modo de Juego</h3>
+                        <div class="modes-grid">
+                            <div class="mode-card">
+                                <input type="radio" name="game-mode" id="mode-impostor" value="impostor" checked>
+                                <label for="mode-impostor">
+                                    <div class="mode-icon">🎭</div>
+                                    <div class="mode-title">El Sigma Impostor</div>
+                                    <div class="mode-desc">Clásico juego de palabras y engaño. ¡Descubre al impostor!</div>
+                                </label>
+                            </div>
+                            <!-- Teléfono Roto deshabilitado temporalmente -->
                         </div>
                     </div>
 
-                    <!-- COLUMNA DERECHA: Pasos -->
-                    <div class="lobby-right">
-                        <h3 style="color: #00FFFF; margin-bottom: 15px;">📋 PASOS</h3>
-                        <div style="text-align: left; font-size: 0.9em; line-height: 2;">
-                            <p><span style="color: #00FF00;">✓</span> <span style="color: #E0E0E0;">Ingresa tu nombre</span></p>
-                            <p><span style="color: #00FF00;">✓</span> <span style="color: #E0E0E0;">Crea o únete a sala</span></p>
-                            <p><span style="color: #0066FF;">→</span> <span style="color: #E0E0E0;">Espera 3+ jugadores</span></p>
-                            <p><span style="color: #0066FF;">→</span> <span style="color: #E0E0E0;">Presiona iniciar</span></p>
-                            <p><span style="color: #FF6B00;">⚡</span> <span style="color: #E0E0E0;">Habla por turnos</span></p>
-                            <p><span style="color: #FF6B00;">⚡</span> <span style="color: #E0E0E0;">Vota al impostor</span></p>
-                            <p><span style="color: #FFD700;">🏆</span> <span style="color: #E0E0E0;">¡Gana!</span></p>
+                    <div class="lobby-actions">
+                        <!-- COLUMNA IZQUIERDA: Crear Sala -->
+                        <div class="lobby-section">
+                            <h3 style="color: #00FFFF; margin-bottom: 15px;">🚀 Crear Nueva Sala</h3>
+                            <button id="create-room" style="width: 100%;">Crear Partida</button>
+                        </div>
+
+                        <!-- COLUMNA DERECHA: Unirse a Sala -->
+                        <div class="lobby-section">
+                            <h3 style="color: #00FFFF; margin-bottom: 15px;">🚪 Unirse a Sala</h3>
+                            <div class="input-group">
+                                <input type="text" id="room-code-input" placeholder="Código de sala">
+                                <button id="join-room">Unirse</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="personalization-section">
+                    <div class="personalization-section" style="width:100%">
                         <h3>⚙️ MÁS OPCIONES</h3>
                         <div class="settings-grid">
                             <button id="shop-btn" class="settings-btn">🛒 Tienda</button>
                             <button id="profile-btn" class="settings-btn">👤 Perfil</button>
                             <button id="settings-btn" class="settings-btn">Ajustes</button>
                             <button id="show-tutorial-btn" class="settings-btn">Tutorial</button>
-                            <button id="rules-btn" class="settings-btn">Normas</button>
                             <button id="admin-btn" class="settings-btn" style="display: none;">🛡️ Admin</button>
                         </div>
                     </div>
@@ -391,8 +407,8 @@
             </div>
 
         </main>
-    </div>
-    <footer>
+
+        <footer>
         <div class="footer-content">
             <span class="footer-text">© 2025 <strong>Sigma Company</strong> | Desarrollado con ❤️</span>
             <div class="social-media">
@@ -416,7 +432,8 @@
                 <text x="50" y="60" font-size="50" font-weight="bold" text-anchor="middle" fill="#00FFFF" font-family="Montserrat">Σ</text>
             </svg>
         </div>
-    </footer>
+        </footer>
+    </div>
     <script type="module" src="app.js"></script>
 </body>
 </html>

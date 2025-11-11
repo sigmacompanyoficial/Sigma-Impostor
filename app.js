@@ -1,6 +1,7 @@
 import { firebaseConfig } from "./firebase-config.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-analytics.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
 import { getDatabase, ref, set, push, onValue, get, update, child, remove } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
 import { categories } from "./words.js";
 import { getCurrentUser, getUserProfile, logoutUser } from "./auth.js";
@@ -11,16 +12,18 @@ console.log('🎮 Iniciando El Sigma Impostor - Versión Profesional');
 // ==================== CONFIGURACIÓN GLOBAL ====================
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+const firestore = getFirestore(app); // Inicializar Firestore
 const analytics = getAnalytics(app);
 
 const GAME_CONFIG = {
     MAX_PLAYERS: 20,
     MIN_PLAYERS: 3,
-    TURN_TIME: 10000, // Reducido a 10 segundos
-    ROUNDS: 2,
+    TURN_TIME: 30000, // Aumentado a 30 segundos para mejor jugabilidad
+    ROUNDS: 2, // Cambiado a 2 rondas
     INACTIVE_TIME: 5 * 60 * 1000,
     BOT_THINK_TIME: 2000,
     BOT_MAX_THINK: 5000,
+    // GARTIC_TURN_TIME: 60000, // 1 minuto para dibujar/escribir en Teléfono Roto
 };
 
 // ==================== ESTADO GLOBAL ====================
@@ -38,8 +41,10 @@ const gameState = {
     isHost: false,
     gameStarted: false,
     musicVolume: parseFloat(localStorage.getItem('musicVolume')) || 0.5,
+    playerCustomColor: localStorage.getItem('playerCustomColor') || null, // Color personalizado del jugador
     sfxVolume: parseFloat(localStorage.getItem('sfxVolume')) || 0.5,
     chatMuted: false,
+    selectedGameMode: 'impostor', // Modo de juego por defecto
 };
 
 // ==================== ELEMENTOS DEL DOM ====================
@@ -50,6 +55,8 @@ const DOM = {
     joinRoomBtn: document.getElementById('join-room'),
     playerNameInput: document.getElementById('player-name-input'),
     roomCodeInput: document.getElementById('room-code-input'),
+    onlineUsersCounter: document.getElementById('online-users-counter'), // Comentado porque no se usa en esta versión
+    gameModeRadios: document.querySelectorAll('input[name="game-mode"]'),
     
     // Tutorial y Configuración
     tutorialModal: document.getElementById('tutorial-modal'),
@@ -102,6 +109,7 @@ const DOM = {
     resultMessage: document.getElementById('result-message'),
     playAgainBtn: document.getElementById('play-again'),
     backBtn: document.getElementById('back-btn'),
+
 };
 
 // ==================== SONIDOS ====================
@@ -109,8 +117,8 @@ class SoundManager {
     constructor() {
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         this.backgroundOscillator = null;
-        this.backgroundGain = null;
-        this.isBackgroundPlaying = false;
+        this.backgroundMusicInterval = null; // Para el arpegio
+        this.isBackgroundPlaying = false; // Para controlar el estado
     }
 
     play(type = 'notification', duration = 0.1) {
@@ -144,44 +152,51 @@ class SoundManager {
     }
 
     startBackground() {
-        if (this.isBackgroundPlaying || !gameState.soundEnabled || gameState.musicVolume === 0) return;
-
-        try {
-            this.backgroundOscillator = this.audioContext.createOscillator();
-            this.backgroundGain = this.audioContext.createGain();
-            const filter = this.audioContext.createBiquadFilter();
-            
-            this.backgroundOscillator.connect(filter);
-            filter.connect(this.backgroundGain);
-            this.backgroundGain.connect(this.audioContext.destination);
-
-            this.backgroundOscillator.frequency.value = 120; // Bass frequency
-            this.backgroundOscillator.type = 'sine';
-            filter.type = 'lowpass';
-            filter.frequency.value = 500;
-            
-            this.backgroundGain.gain.setValueAtTime(0.08 * gameState.musicVolume, this.audioContext.currentTime);
-            this.backgroundOscillator.start();
-            this.isBackgroundPlaying = true;
-        } catch (error) {
-            console.warn('Error iniciando música de fondo:', error);
-        }
+        if (this.isBackgroundPlaying) return;
+        this.isBackgroundPlaying = true;
+        this.updateBackgroundVolume(); // Inicia o ajusta la música
     }
 
     stopBackground() {
-        if (this.backgroundOscillator) {
-            try {
-                this.backgroundOscillator.stop();
-                this.isBackgroundPlaying = false;
-            } catch (error) {
-                console.warn('Error deteniendo música:', error);
-            }
+        if (this.backgroundMusicInterval) {
+            clearInterval(this.backgroundMusicInterval);
+            this.backgroundMusicInterval = null;
         }
+        this.isBackgroundPlaying = false;
     }
 
     updateBackgroundVolume() {
-        if (this.backgroundGain && this.isBackgroundPlaying) {
-            this.backgroundGain.gain.setValueAtTime(0.08 * gameState.musicVolume, this.audioContext.currentTime);
+        // Detener música actual para ajustar volumen
+        if (this.backgroundMusicInterval) {
+            clearInterval(this.backgroundMusicInterval);
+            this.backgroundMusicInterval = null;
+        }
+
+        // Si la música debe sonar y el volumen no es cero
+        if (this.isBackgroundPlaying && gameState.soundEnabled && gameState.musicVolume > 0) {
+            // Nueva melodía: Un arpegio más misterioso y oscuro (Cm7 -> G)
+            const notes = [130.81, 155.56, 196.00, 233.08, 196.00, 155.56]; // C3, D#3, G3, A#3
+            let noteIndex = 0;
+
+            this.backgroundMusicInterval = setInterval(() => {
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                const filter = this.audioContext.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(800, this.audioContext.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(filter);
+                filter.connect(this.audioContext.destination);
+
+                oscillator.type = 'triangle'; // Un tono más suave que 'sine'
+                oscillator.frequency.setValueAtTime(notes[noteIndex % notes.length], this.audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0.09 * gameState.musicVolume, this.audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.8);
+                oscillator.start(this.audioContext.currentTime);
+                oscillator.stop(this.audioContext.currentTime + 0.8);
+                noteIndex++;
+            }, 600); // Cambia de nota cada 600ms para un ritmo más lento
         }
     }
 }
@@ -289,6 +304,22 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+/**
+ * Establece un color personalizado para el jugador actual, visible localmente.
+ * @param {string} color - El código de color HEX (ej: "#FF00FF").
+ */
+function setPlayerColor(color) {
+    if (!/^#([A-Fa-f0-9]{3}){1,2}$/.test(color)) {
+        showNotification('Color inválido. Usa formato HEX (#RRGGBB).', 'error');
+        return;
+    }
+    gameState.playerCustomColor = color;
+    localStorage.setItem('playerCustomColor', color);
+    showNotification(`🎨 Tu color personalizado es ${color}`, 'success');
+    // Nota: Este color se aplica localmente. Para que otros jugadores lo vean,
+    // necesitaría ser guardado en Firebase en el perfil del jugador.
+}
+
 async function cleanupInactiveRooms() {
     try {
         const roomsRef = ref(database, 'salas/');
@@ -311,17 +342,40 @@ async function cleanupInactiveRooms() {
     }
 }
 
+// ==================== CONTADOR DE USUARIOS ONLINE ====================
+async function updateOnlineUsersCounter() {
+    try {
+        const roomsRef = ref(database, 'salas');
+        const snapshot = await get(roomsRef);
+        if (!snapshot.exists()) {
+            if (DOM.onlineUsersCounter) DOM.onlineUsersCounter.textContent = '0';
+            return;
+        }
+
+        const rooms = snapshot.val();
+        let totalUsers = 0;
+        for (const roomCode in rooms) {
+            const room = rooms[roomCode];
+            if (room.jugadores) {
+                totalUsers += Object.keys(room.jugadores).length;
+            }
+        }
+        if (DOM.onlineUsersCounter) DOM.onlineUsersCounter.textContent = totalUsers;
+    } catch (error) {
+        console.error("Error actualizando contador de usuarios:", error);
+    }
+}
 // ==================== NAVEGACIÓN ====================
 function showScreen(screenName) {
     const screens = [
-        DOM.lobby, DOM.waitRoom, DOM.animationRoom, 
+        DOM.lobby, DOM.waitRoom, DOM.animationRoom,
         DOM.gameRoom, DOM.votingSection, DOM.resultsRoom
     ];
 
     screens.forEach(screen => {
         if (screen) screen.classList.add('hidden');
     });
-
+    
     const screenMap = {
         'lobby': DOM.lobby,
         'wait': DOM.waitRoom,
@@ -330,7 +384,7 @@ function showScreen(screenName) {
         'voting': DOM.votingSection,
         'results': DOM.resultsRoom,
     };
-
+    
     const target = screenMap[screenName];
     if (target) {
         target.classList.remove('hidden');
@@ -344,7 +398,7 @@ function goToLobby() {
     gameState.currentPlayerId = null;
     gameState.gameStarted = false;
     clearTimeout(gameState.turnTimeout);
-    soundManager.stopBackground();
+    soundManager.stopBackground(); // Detener música al volver al lobby
     soundManager.play('notification');
 }
 
@@ -373,6 +427,7 @@ DOM.createRoomBtn?.addEventListener('click', async () => {
         await set(roomRef, {
             host: playerName,
             estado: 'espera',
+            gameMode: gameState.selectedGameMode, // Guardar el modo de juego
             createdAt: Date.now(),
             lastActivity: Date.now(),
             rondaActual: 0,
@@ -668,6 +723,7 @@ DOM.saveSettingsBtn?.addEventListener('click', () => {
 
     // Actualizar música de fondo si está en juego
     soundManager.updateBackgroundVolume();
+    
 
     DOM.settingsModal?.classList.add('hidden');
     soundManager.play('success');
@@ -765,11 +821,8 @@ DOM.startGameBtn?.addEventListener('click', async () => {
             turnoDe: playerIds[0],
             lastActivity: Date.now(),
         });
-
-        soundManager.play('success');
-        showNotification('🎮 ¡Juego iniciado!', 'success');
     } catch (error) {
-        console.error('Error iniciando juego:', error);
+        console.error('Error al iniciar el juego:', error);
         showNotification('Error al iniciar el juego', 'error');
     }
 });
@@ -848,7 +901,7 @@ function showAnimationScreen(room) {
     }, 5000);
 }//Tiempo para que salga la palabra
 
-// ==================== PANTALLA DE JUEGO ====================
+// ==================== PANTALLA DE JUEGO Y REVELACIÓN DE PALABRA ====================
 let currentTurnTimer = null;
 
 async function showGameRoom(room) {
@@ -870,69 +923,27 @@ async function showGameRoom(room) {
         return;
     }
 
-    // Hide game info initially
+    // Mostrar la información del juego directamente
     if (DOM.gameInfo) {
-        DOM.gameInfo.classList.add('hidden');
+        if (player.rol === 'impostor') {
+            DOM.gameInfo.textContent = `📂 Categoría: ${room.categoria}`;
+        } else {
+            DOM.gameInfo.textContent = `💭 Palabra: ${player.palabra}`;
+        }
+        DOM.gameInfo.classList.remove('hidden');
     }
 
-    // Display word reveal UI
+    // Ocultar el contenedor de revelación de palabra, ya que no se usará
     if (DOM.wordRevealContainer) {
-        DOM.wordRevealContainer.classList.remove('hidden');
-        DOM.wordRevealTimerDisplay.textContent = '10s'; // Initial display
-        DOM.wordRevealButton.textContent = 'Haz click para ver tu palabra/rol';
-        DOM.wordRevealButton.disabled = false;
+        DOM.wordRevealContainer.classList.add('hidden');
     }
 
-    // Disable chat during reveal phase
-    DOM.chatInput.disabled = true;
-    DOM.sendMessageBtn.disabled = true;
-
-    let revealTimeLeft = 10; // 10 seconds
-
-    // Clear any previous reveal timers
+    // Limpiar cualquier temporizador de revelación que pudiera haber quedado
     if (gameState.wordRevealInterval) clearInterval(gameState.wordRevealInterval);
     if (gameState.wordRevealTimeout) clearTimeout(gameState.wordRevealTimeout);
 
-    gameState.wordRevealInterval = setInterval(() => {
-        revealTimeLeft--;
-        if (DOM.wordRevealTimerDisplay) {
-            DOM.wordRevealTimerDisplay.textContent = `${revealTimeLeft}s`;
-        }
-
-        if (revealTimeLeft <= 0) {
-            clearInterval(gameState.wordRevealInterval);
-            if (DOM.wordRevealContainer) {
-                DOM.wordRevealContainer.classList.add('hidden');
-            }
-            // If timer expires without click, proceed to game turn phase
-            // The word will remain hidden for this player
-            startGameTurnPhase(room);
-        }
-    }, 1000);
-
-    // Event listener for reveal button
-    const revealClickHandler = () => {
-        clearInterval(gameState.wordRevealInterval);
-        if (DOM.wordRevealContainer) {
-            DOM.wordRevealContainer.classList.add('hidden');
-        }
-
-        // Reveal the word/category
-        if (DOM.gameInfo) {
-            if (player.rol === 'impostor') {
-                DOM.gameInfo.textContent = `📂 Categoría: ${room.categoria}`;
-            } else {
-                DOM.gameInfo.textContent = `💭 Palabra: ${player.palabra}`;
-            }
-            DOM.gameInfo.classList.remove('hidden');
-        }
-        DOM.wordRevealButton.removeEventListener('click', revealClickHandler); // Remove to prevent multiple calls
-        startGameTurnPhase(room); // Proceed to game turn phase immediately after revealing
-    };
-    if (DOM.wordRevealButton) {
-        DOM.wordRevealButton.removeEventListener('click', revealClickHandler); // Ensure no duplicate listeners
-        DOM.wordRevealButton.addEventListener('click', revealClickHandler);
-    }
+    // Iniciar la fase de turnos directamente
+    startGameTurnPhase(room);
 }
 
 function startGameTurnPhase(room) {
@@ -1003,7 +1014,7 @@ function updateTurn(room) {
         clearInterval(gameState.turnInterval); // Limpiar el intervalo cuando el timeout se dispara
         gameState.turnInterval = null; // Resetear el ID del intervalo
         passTurn(room);
-    }, 10000 + 500); // Añadido un pequeño buffer
+    }, GAME_CONFIG.TURN_TIME + 500); // Usa GAME_CONFIG.TURN_TIME
 }
 
 async function handleBotTurn(room) {
@@ -1157,7 +1168,7 @@ DOM.sendMessageBtn?.addEventListener('click', async () => {
         DOM.chatInput.value = '';
         soundManager.play('message');
 
-        await passTurn(room);
+        await passTurn(room); // El turno pasa después de enviar un mensaje
     } catch (error) {
         console.error('Error enviando mensaje:', error);
         showNotification('Error al enviar mensaje', 'error');
@@ -1389,6 +1400,20 @@ function showVotingScreen(room) {
 
     const player = room.jugadores?.[gameState.currentPlayerId];
 
+    // Indicador de quién está escribiendo
+    const typingPlayers = Object.values(room.jugadores).filter(p => p.isTyping && p.nombre !== player.nombre);
+    if (DOM.typingIndicator) {
+        if (typingPlayers.length > 0) {
+            const names = typingPlayers.map(p => p.nombre).join(', ');
+            DOM.typingIndicator.textContent = `✏️ ${names} está(n) escribiendo...`;
+            DOM.typingIndicator.classList.add('active');
+        } else {
+            DOM.typingIndicator.textContent = '';
+            DOM.typingIndicator.classList.remove('active');
+        }
+    }
+
+
     if (DOM.votingList) {
         DOM.votingList.innerHTML = '';
     }
@@ -1398,6 +1423,12 @@ function showVotingScreen(room) {
     h3.style.color = '#00FFFF';
     DOM.votingList?.appendChild(h3);
 
+    // Contenedor para la lista de estado de voto
+    const votingStatusContainer = document.createElement('div');
+    votingStatusContainer.id = 'voting-status-container';
+    DOM.votingList?.appendChild(votingStatusContainer);
+    updateVotingStatus(room.jugadores);
+
     if (player?.haVotado) {
         if (DOM.votingList) {
             DOM.votingList.innerHTML = '<p style="color: #00FFFF; text-align: center; margin-top: 20px;">✓ Has votado. Esperando a los demás...</p>';
@@ -1405,6 +1436,7 @@ function showVotingScreen(room) {
         return;
     }
 
+    // Contenedor para los botones de votación
     for (const playerId in room.jugadores) {
         const playerInList = room.jugadores[playerId];
 
@@ -1457,6 +1489,30 @@ function showVotingScreen(room) {
     
 
     soundManager.play('turn');
+}
+
+function updateVotingStatus(players) {
+    const container = document.getElementById('voting-status-container');
+    if (!container) return;
+
+    container.innerHTML = '<h4 style="color: #00FFFF; margin-bottom: 10px;">Estado de la Votación:</h4>';
+    const statusGrid = document.createElement('div');
+    statusGrid.className = 'voting-status-grid';
+
+    for (const playerId in players) {
+        const player = players[playerId];
+        const statusEl = document.createElement('div');
+        statusEl.className = 'voting-status-item';
+        if (player.haVotado) {
+            statusEl.classList.add('voted');
+        }
+        statusEl.innerHTML = `
+            <span class="player-name">${player.nombre}</span>
+            <span class="vote-status">${player.haVotado ? '✓ Votó' : '🤔 Pensando...'}</span>
+        `;
+        statusGrid.appendChild(statusEl);
+    }
+    container.appendChild(statusGrid);
 }
 
 async function handleBotVote(room, botPlayerId) {
@@ -1526,7 +1582,7 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
         const snapshot = await get(roomRef);
         if (snapshot.exists()) {
             const room = snapshot.val();
-            const allVoted = Object.values(room.jugadores || {}).every(p => p.haVotado);
+            const allVoted = Object.values(room.jugadores || {}).filter(p => !p.isBot).every(p => p.haVotado);
 
             if (allVoted && gameState.isHost) {
                 calculateResults(room);
@@ -1539,7 +1595,7 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
 }
 
 async function calculateResults(room){
-    try {
+   try {
         const votes = {};
         let maxVotes = 0;
         let expelledPlayerId = null;
@@ -1559,7 +1615,7 @@ async function calculateResults(room){
         let message = '';
         if (expelledPlayerId) {
             const expelledPlayer = room.jugadores?.[expelledPlayerId];
-            if (expelledPlayer) {
+           if (expelledPlayer) {
                 if (expelledPlayer.rol === 'impostor') {
                     message = `✅ ¡Los jugadores ganan! El impostor era ${expelledPlayer.nombre}`;
                     soundManager.play('success');
@@ -1573,14 +1629,14 @@ async function calculateResults(room){
             soundManager.play('error');
         }
 
-       await update(ref(database, `salas/${gameState.currentRoom}`), {
+        await update(ref(database, `salas/${gameState.currentRoom}`), {
             estado: 'fin',
             message,
             lastActivity: Date.now(),
         });
-    } catch (error) {
+   } catch (error) {
         console.error('Error calculando resultados:', error);
-    }
+   }
 }
 
 function isSpectator(room, playerId){
@@ -1629,57 +1685,136 @@ function showResultsScreen(room){
         DOM.resultMessage.appendChild(playerStats);
     }
 
+    // Actualizar estadísticas del jugador si está autenticado
+    const user = getCurrentUser();
+    if (user) {
+        const player = room.jugadores[gameState.currentPlayerId];
+        const profile = getUserProfile(user.uid);
+        if (player && profile) {
+            const updates = {
+                partidas: (profile.partidas || 0) + 1
+            };
+            const didWin = (player.rol === 'impostor' && room.message.includes('impostor gana')) || 
+                           (player.rol === 'jugador' && room.message.includes('jugadores ganan'));
+            if (didWin) {
+                updates.victorias = (profile.victorias || 0) + 1;
+            }
+            updateUserProfile(user.uid, updates);
+        }
+    }
     soundManager.play('success');
 }
 
 DOM.playAgainBtn?.addEventListener('click', async () => {
-    if (!gameState.currentRoom || !gameState.isHost) return;
+    if (!gameState.currentRoom) return;
 
-    try {
-        const roomRef = ref(database, `salas/${gameState.currentRoom}`);
-        const snapshot = await get(roomRef);
+    // Si el jugador es el anfitrión, reinicia la sala para todos.
+    if (gameState.isHost) {
+        try {
+            const roomRef = ref(database, `salas/${gameState.currentRoom}`);
+            const snapshot = await get(roomRef);
 
-        if (snapshot.exists()) {
-            const room = snapshot.val();
+            if (snapshot.exists()) {
+                const room = snapshot.val();
+                const updates = {
+                    estado: 'espera',
+                    rondaActual: 0,
+                    turnoDe: null,
+                    chat: null,
+                    votos: null,
+                    message: null,
+                    categoria: null,
+                    palabra: null,
+                    lastActivity: Date.now(),
+                };
 
-            const updates = {
-                estado: 'espera',
-                rondaActual: 0,
-                turnoDe: null,
-                chat: null,
-                votos: null,
-                message: null,
-                categoria: null,
-                palabra: null,
-                lastActivity: Date.now(),
-            };
-            const palabra = "Pollo";
+                for (const playerId in room.jugadores) {
+                    updates[`jugadores/${playerId}/haVotado`] = false;
+                    updates[`jugadores/${playerId}/rol`] = null;
+                    updates[`jugadores/${playerId}/palabra`] = null;
+                    updates[`jugadores/${playerId}/votoPor`] = null;
+                }
 
-            for (const playerId in room.jugadores) {
-                updates[`jugadores/${playerId}/haVotado`] = false;
-                updates[`jugadores/${playerId}/rol`] = null;
-                updates[`jugadores/${playerId}/palabra`] = null;
-                updates[`jugadores/${playerId}/votoPor`] = null;
+                await update(roomRef, updates);
             }
-            updates[`palabra`] = palabra;
-
-            await update(roomRef, updates);
-
-            soundManager.play('success');
-            showNotification('🔄 Reiniciando juego...', 'success');
+        } catch (error) {
+            console.error('Error reiniciando juego:', error);
         }
-    } catch (error) {
-        console.error('Error reiniciando juego:', error);
-        showNotification('Error al reiniciar', 'error');
     }
+    // Para todos los jugadores (incluido el host), la pantalla cambiará a 'espera'
+    // automáticamente gracias al listener onValue que llama a handleRoomStateChange.
 });
 
 // ==================== BACK BUTTON ====================
 DOM.backBtn?.addEventListener('click', goToLobby);
 
+// DOM.garticSubmitBtn?.addEventListener('click', async () => {
+//     clearInterval(garticTimerInterval);
+//     const room = gameState.currentRoomData;
+//     const roomRef = ref(database, `salas/${gameState.currentRoom}`);
+//     let content;
+
+//     if (room.fase === 'ESCRIBIR') {
+//         content = document.getElementById('gartic-input').value.trim();
+//         if (!content) {
+//             showNotification("Debes escribir algo.", "error");
+//             startGarticTimer(); // Reiniciar timer si no se envió nada
+//             return;
+//         }
+//     } else { // DIBUJAR
+//         const canvas = DOM.drawingCanvas;
+//         content = canvas.toDataURL('image/png'); // Guardar como base64
+//         // Guardar el dibujo en Firestore
+//         const drawingId = `${gameState.currentRoom}_${gameState.currentPlayerId}_${room.rondaActual}`;
+//         await setDoc(doc(firestore, "drawings", drawingId), {
+//             imageData: content
+//         });
+//         content = `firestore:${drawingId}`; // Guardar referencia en Realtime DB
+//     }
+
+//     // Actualizar el álbum en Realtime Database
+//     const albumPath = `salas/${gameState.currentRoom}/album/${gameState.currentPlayerId}`;
+//     const playerAlbumRef = ref(database, albumPath);
+//     const snapshot = await get(playerAlbumRef);
+//     const playerAlbum = snapshot.val() || [];
+//     playerAlbum.push(content);
+//     await set(playerAlbumRef, playerAlbum);
+
+//     // Pasar al siguiente turno
+//     passGarticTurn(room);
+// });
+
+// ==================== ESTILOS DINÁMICOS ==================== 
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInMessage {
+        from { opacity: 0; transform: translateX(-20px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(200px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideOutRight {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(200px); }
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.05); }
+    }
+    .timer-bar { animation: progressAnim 30s linear !important; }
+    @keyframes progressAnim {
+        from { width: 100%; }
+        to { width: 0%; }
+    }
+`;
+document.head.appendChild(style);
+
 // ==================== INICIALIZACIÓN ====================
 window.addEventListener('load', () => {
     cleanupInactiveRooms();
+    window.setMyColor = setPlayerColor; // Expose setPlayerColor to the console
 
     console.log('El Sigma Impostor cargado en modo sin autenticación.');
 
@@ -1714,35 +1849,12 @@ window.addEventListener('load', () => {
     // Verificar si hay código de sala en la URL
     verificarCodigoEnURL();
     
+    // Iniciar contador de usuarios online
+    updateOnlineUsersCounter();
+    setInterval(updateOnlineUsersCounter, 15000); // Actualizar cada 15 segundos
+
     console.log('✅ El Sigma Impostor cargado correctamente');
 });
 
-// ==================== ESTILOS DINÁMICOS ==================== 
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideInMessage {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes slideInRight {
-        from { opacity: 0; transform: translateX(200px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    @keyframes slideOutRight {
-        from { opacity: 1; transform: translateX(0); }
-        to { opacity: 0; transform: translateX(200px); }
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.7; transform: scale(1.05); }
-    }
-    .timer-bar { animation: progressAnim 30s linear !important; }
-    @keyframes progressAnim {
-        from { width: 100%; }
-        to { width: 0%; }
-    }
-`;
-document.head.appendChild(style);
-
-// Limpiar salas cada 5 minutos
-setInterval(cleanupInactiveRooms, 5 * 60 * 1000);
+// ==================== FIN DEL CÓDIGO ====================
+    
