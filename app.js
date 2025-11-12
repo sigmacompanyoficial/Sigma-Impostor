@@ -1567,25 +1567,31 @@ async function voteFor(voterId, votedPlayerId) { // Modified to accept voterId
 
     try {
         const roomRef = ref(database, `salas/${gameState.currentRoom}`);
-       
+
         // Update the voter's status
         await update(ref(database, `salas/${gameState.currentRoom}/jugadores/${voterId}`), {
             haVotado: true,
             votoPor: votedPlayerId,
         });
 
-        await push(child(roomRef, `votos/${votedPlayerId}`), gameState.currentPlayerId);
+        // Registrar el voto. Usamos el voterId para asegurar que se registra el voto correcto.
+        await push(child(roomRef, `votos/${votedPlayerId}`), voterId);
 
-       soundManager.play('vote');
+        soundManager.play('vote');
         showNotification('✅ Voto registrado', 'success');
 
+        // Obtener el estado más reciente de la sala para verificar si todos han votado
         const snapshot = await get(roomRef);
         if (snapshot.exists()) {
             const room = snapshot.val();
-            const allVoted = Object.values(room.jugadores || {}).filter(p => !p.isBot).every(p => p.haVotado);
-
+            
+            // Comprobamos si TODOS los jugadores (humanos y bots) han votado.
+            const allVoted = Object.values(room.jugadores || {}).every(p => p.haVotado);
+            
+            // Solo el host calcula los resultados para evitar duplicados.
             if (allVoted && gameState.isHost) {
-                calculateResults(room);
+                // Añadimos un pequeño retardo para que el último jugador vea la confirmación de su voto.
+                setTimeout(() => calculateResults(room), 500);
             }
         }
     } catch (error) {
