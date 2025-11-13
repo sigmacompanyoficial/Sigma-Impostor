@@ -1399,6 +1399,8 @@ function showVotingScreen(room) {
     showScreen('voting');
 
     const player = room.jugadores?.[gameState.currentPlayerId];
+    // Limpiar el contenido anterior para evitar duplicados
+    if (DOM.votingList) DOM.votingList.innerHTML = '';
 
     // Indicador de quién está escribiendo
     const typingPlayers = Object.values(room.jugadores).filter(p => p.isTyping && p.nombre !== player.nombre);
@@ -1413,23 +1415,26 @@ function showVotingScreen(room) {
         }
     }
 
-
-    if (DOM.votingList) {
-        DOM.votingList.innerHTML = '';
-    }
-
     const h3 = document.createElement('h3');
     h3.textContent = '❓ ¿Quién es el Impostor?';
     h3.style.color = '#00FFFF';
     DOM.votingList?.appendChild(h3);
-
+    
     // Contenedor para la lista de estado de voto
     const votingStatusContainer = document.createElement('div');
     votingStatusContainer.id = 'voting-status-container';
     DOM.votingList?.appendChild(votingStatusContainer);
     updateVotingStatus(room.jugadores);
 
-    if (player?.haVotado) {
+    // Botón para saltar votaciones (solo para el host)
+    if (gameState.isHost) {
+        addSkipVotingButton();
+    }
+    
+    // Si el jugador ya ha votado, no necesita ver los botones de nuevo.
+    const alreadyVoted = player?.haVotado;
+
+    if (alreadyVoted) {
         if (DOM.votingList) {
             DOM.votingList.innerHTML = '<p style="color: #00FFFF; text-align: center; margin-top: 20px;">✓ Has votado. Esperando a los demás...</p>';
         }
@@ -1486,7 +1491,6 @@ function showVotingScreen(room) {
             }
         }
     }
-    
 
     soundManager.play('turn');
 }
@@ -1513,6 +1517,31 @@ function updateVotingStatus(players) {
         statusGrid.appendChild(statusEl);
     }
     container.appendChild(statusGrid);
+}
+
+function addSkipVotingButton() {
+    if (document.getElementById('skip-voting-btn')) return; // Evitar duplicados
+
+    const skipBtn = document.createElement('button');
+    skipBtn.id = 'skip-voting-btn';
+    skipBtn.textContent = 'Saltar Votaciones';
+    skipBtn.style.cssText = `
+        margin-top: 25px;
+        padding: 10px 20px;
+        background: linear-gradient(135deg, #FFA500, #FF8C00);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+    `;
+    skipBtn.onclick = async () => {
+        showNotification('⏭️ El host ha saltado la votación.', 'notification');
+        const snapshot = await get(ref(database, `salas/${gameState.currentRoom}`));
+        if (snapshot.exists()) calculateResults(snapshot.val());
+    };
+    DOM.votingList?.appendChild(skipBtn);
 }
 
 async function handleBotVote(room, botPlayerId) {
